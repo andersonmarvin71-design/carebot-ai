@@ -1,41 +1,39 @@
-from openai import OpenAI
-import os
+from flask import Flask, request
+import requests
 
 app = Flask(__name__)
 
+# 🔑 Telegram Bot Token (BotFather से)
 TOKEN = "8618597269:AAGuVOwLmesBYZ2OazaQId0SNm_gwowGs6I"
-import os
 
-OPENAI_API_KEY = 
-os.environ.get("OPENAI_API_KEY")
+# 🔑 Gemini API Key (Google AI Studio से)
+GEMINI_API_KEY = "YAHAN_GEMINI_KEY"
 
+# 📩 Telegram message भेजना
 def send_message(chat_id, text):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     requests.post(url, json={"chat_id": chat_id, "text": text})
 
+# 🤖 Gemini AI reply
 def get_ai_reply(user_text):
-    url = "https://api.openai.com/v1/chat/completions"
-
-    headers = {
-        "Authorization": f"Bearer {OPENAI_API_KEY}",
-        "Content-Type": "application/json"
-    }
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={GEMINI_API_KEY}"
 
     data = {
-        "model": "gpt-4o-mini",
-        "messages": [
-            {"role": "system", "content": "You are a helpful health assistant."},
-            {"role": "user", "content": user_text}
+        "contents": [
+            {
+                "parts": [{"text": f"You are a helpful health assistant. {user_text}"}]
+            }
         ]
     }
 
-    res = requests.post(url, headers=headers, json=data)
+    res = requests.post(url, json=data)
 
     try:
-        return res.json()["choices"][0]["message"]["content"]
+        return res.json()["candidates"][0]["content"]["parts"][0]["text"]
     except:
-        return "Error in AI"
+        return "⚠️ AI error"
 
+# 🔗 Telegram webhook
 @app.route(f"/{TOKEN}", methods=["POST"])
 def telegram():
     data = request.get_json()
@@ -47,13 +45,15 @@ def telegram():
     message = data["message"].get("text", "")
 
     if message == "/start":
-        reply = "👋 Welcome to CareBot AI"
+        reply = "👋 Welcome to CareBot AI (FREE VERSION)"
     else:
         reply = get_ai_reply(message)
+reply += "\n\n— Developed by Monu Patel 🚀"
 
     send_message(chat_id, reply)
     return "ok"
 
+# 🧪 Test route
 @app.route("/")
 def home():
     return "Bot running 🚀"
