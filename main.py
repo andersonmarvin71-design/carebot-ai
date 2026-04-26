@@ -1,21 +1,16 @@
-# ******************************************
-# CareBot AI - Telegram Health Assistant
-# Created by: Monu Patel
-# ******************************************
-
 import os
 import requests
 from flask import Flask, request
 
 app = Flask(__name__)
 
-# Config - Render Environment Variables se lega
+# Config
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 def get_ai_reply(user_text):
-    # ✅ यह सबसे स्टेबल URL है (V1 के साथ gemini-pro)
-    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key={GEMINI_API_KEY}"
+    # ✅ यह URL बिना किसी वर्जन (v1/v1beta) के चक्कर के काम करेगा
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
     
     payload = {
         "contents": [{"parts": [{"text": user_text}]}]
@@ -25,16 +20,20 @@ def get_ai_reply(user_text):
         response = requests.post(url, json=payload, timeout=15)
         result = response.json()
         
-        # अगर जवाब मिल गया
-        if "candidates" in result and result["candidates"]:
+        if "candidates" in result:
             return result["candidates"][0]["content"]["parts"][0]["text"]
         
-        # एरर आने पर साफ़ मैसेज देगा
-        error_msg = result.get('error', {}).get('message', 'Unknown Error')
-        return f"⚠️ API Error: {error_msg}"
+        # अगर 1.5-flash न मिले, तो पुराने gemini-pro पर स्विच करेगा
+        url_alt = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={GEMINI_API_KEY}"
+        response = requests.post(url_alt, json=payload, timeout=15)
+        result = response.json()
         
-    except Exception as e:
-        return f"❌ Connection Error: {str(e)}"
+        if "candidates" in result:
+            return result["candidates"][0]["content"]["parts"][0]["text"]
+            
+        return "⚠️ Google API अभी इस मॉडल को सपोर्ट नहीं कर रही है।"
+    except:
+        return "❌ Connection Error."
 
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
@@ -44,7 +43,7 @@ def webhook():
         text = data["message"].get("text", "")
         
         if text == "/start":
-            reply = "👋 CareBot AI Live! मैं Monu द्वारा बनाया गया आपका हेल्थ दोस्त हूँ।"
+            reply = "👋 CareBot AI Live! मैं आपकी कैसे मदद कर सकता हूँ?"
         else:
             reply = get_ai_reply(text)
             
@@ -54,7 +53,8 @@ def webhook():
 
 @app.route("/")
 def home():
-    return "CareBot is Running!", 200
+    return "Bot is Running", 200
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    
