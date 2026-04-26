@@ -1,81 +1,55 @@
-# ******************************************
-# CareBot AI - Telegram Health Assistant
-# Created by: Monu Patel
-# Date: 2026-04-26
-# ******************************************
-
-from flask import Flask, request
-import requests
 import os
-import logging
+import requests
+from flask import Flask, request
 
-# Flask setup
 app = Flask(__name__)
 
-# Logging setup (Errors dekhne ke liye)
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# 🔑 Render Environment Variables se keys lega
+# Config
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 def get_ai_reply(user_text):
-    """Gemini AI se response lene ka function"""
-    if not GEMINI_API_KEY:
-        return "❌ Gemini API Key is missing in Render settings."
-
-    # ✅ Latest Gemini 1.5 Flash URL
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={GEMINI_API_KEY}"
+    # ✅ यह URL का सबसे सटीक तरीका है (Google Standard)
+    base_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+    full_url = f"{base_url}?key={GEMINI_API_KEY}"
     
     payload = {
-        "contents": [{
-            "parts": [{"text": f"You are CareBot, a helpful health assistant created by Monu Patel. Provide safe information. User query: {user_text}"}]
-        }]
+        "contents": [{"parts": [{"text": user_text}]}]
     }
     
     try:
-        response = requests.post(url, json=payload, timeout=15)
+        response = requests.post(full_url, json=payload, timeout=15)
         result = response.json()
         
-        # JSON se response nikalna
-        if "candidates" in result and result["candidates"]:
+        # अगर मॉडल मिल गया
+        if "candidates" in result:
             return result["candidates"][0]["content"]["parts"][0]["text"]
-        else:
-            logger.error(f"AI Error: {result}")
-            return "⚠️ AI अभी जवाब नहीं दे पा रहा है। कृपया दोबारा कोशिश करें।"
+        
+        # अगर अभी भी 404 आ रहा है, तो error message दिखाओ
+        return f"⚠️ AI Error: {result.get('error', {}).get('message', 'Unknown Error')}"
     except Exception as e:
-        logger.error(f"Connection Error: {e}")
-        return "❌ Connection Error. Please check logs."
+        return f"❌ Connection Error: {str(e)}"
 
-@app.route("/", methods=["GET"])
-def home():
-    return "CareBot AI is Running Live!", 200
-
-# ✅ Webhook Route - Isse 404 Error nahi aayega
-@app.route(f"/{TOKEN}" if TOKEN else "/webhook", methods=["POST"])
+@app.route(f"/{TOKEN}" if TOKEN else "/bot", methods=["POST"])
 def webhook():
     data = request.get_json()
     if data and "message" in data:
         chat_id = data["message"]["chat"]["id"]
         text = data["message"].get("text", "")
-
+        
         if text == "/start":
-            reply = "👋 *CareBot AI में आपका स्वागत है!*\n\nमैं Monu द्वारा बनाया गया एक हेल्थ असिस्टेंट हूँ। आप मुझसे सेहत से जुड़े सवाल पूछ सकते हैं।"
+            reply = "👋 CareBot AI Live! मैं Monu द्वारा बनाया गया आपका हेल्थ दोस्त हूँ।"
         else:
             reply = get_ai_reply(text)
-        
-        # Telegram ko message bhejna
-        telegram_url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-        requests.post(telegram_url, json={
-            "chat_id": chat_id, 
-            "text": reply,
-            "parse_mode": "Markdown"
-        })
-    
+            
+        requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", 
+                      json={"chat_id": chat_id, "text": reply})
     return "ok", 200
 
+@app.route("/")
+def home():
+    return "Bot is Running", 200
+
 if __name__ == "__main__":
-    # Render automatically PORT assign karta hai
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+            
