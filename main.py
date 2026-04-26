@@ -41,31 +41,29 @@ def send_message(chat_id, text):
     except Exception as e:
         logger.error(f"Telegram Error: {e}")
         return False
-
-# 🤖 Gemini AI से जवाब लेने का फंक्शन (Updated URL & Logic)
+# 🤖 Gemini AI से जवाब लेने का फंक्शन
 def get_ai_reply(user_text):
     if not GEMINI_API_KEY:
-        return "❌ Error: GEMINI_API_KEY missing in Render settings."
+        return "❌ API Key Missing in Render"
 
-    # ✅ Latest Gemini 1.5 Flash URL
+    # ✅ सही और लेटेस्ट Gemini URL
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
     
     payload = {
-        "contents": [{
-            "parts": [{"text": f"You are a helpful health assistant. Provide safe information. User query: {user_text}"}]
-        }]
+        "contents": [{"parts": [{"text": user_text}]}]
     }
     
     try:
         response = requests.post(url, json=payload, timeout=15)
         result = response.json()
         
-        # JSON से जवाब निकालने का सही तरीका
         if "candidates" in result and result["candidates"]:
-            candidate = result["candidates"][0]
-            if "content" in candidate and "parts" in candidate["content"]:
-                return candidate["content"]["parts"][0]["text"]
-            elif candidate.get("finishReason") == "SAFETY":
+            return result["candidates"][0]["content"]["parts"][0]["text"]
+        
+        return "⚠️ AI अभी जवाब नहीं दे पा रहा है। कृपया दोबारा कोशिश करें।"
+    except Exception as e:
+        return f"❌ Connection Error: {str(e)}"
+        
                 return "⚠️ सुरक्षा कारणों से मैं इस सवाल का जवाब नहीं दे सकता।"
         
         logger.error(f"AI Empty Response: {result}")
