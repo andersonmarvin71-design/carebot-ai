@@ -1,44 +1,47 @@
 # ******************************************
-# 🚀 CareBot AI - Telegram Health Assistant
-# 👨‍डिंग: Monu Patel
-# 📅 Date: 2026-04-26
+# 🚀 CareBot AI - Standard Edition
+# 👨‍💻 Created by: Monu Patel
+# 🛠️ Status: High Stability Mode
 # ******************************************
 
 import os
 import requests
+import time
 from flask import Flask, request
 
 app = Flask(__name__)
 
-# Config - Render Environment Variables
+# Config
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 def get_ai_reply(user_text):
-    # ✅ आपके cURL के हिसाब से एकदम सही URL और मॉडल नाम
-    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
+    # ✅ बैकअप मॉडल्स की लिस्ट
+    models = ["gemini-1.5-flash", "gemini-pro", "gemini-flash-latest"]
     
-    headers = {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': GEMINI_API_KEY
-    }
-    
-    payload = {
-        "contents": [{
-            "parts": [{"text": f"You are a health assistant created by Monu Patel. User says: {user_text}"}]
-        }]
-    }
-    
-    try:
-        response = requests.post(url, json=payload, headers=headers, timeout=30)
-        result = response.json()
+    for model in models:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
+        payload = {
+            "contents": [{"parts": [{"text": f"You are a health assistant created by Monu Patel. Answer this: {user_text}"}]}]
+        }
         
-        if "candidates" in result:
-            return result["candidates"][0]["content"]["parts"][0]["text"]
-        
-        return f"❌ AI Error: {result.get('error', {}).get('message', 'Check API Key')}"
-    except Exception as e:
-        return f"⚠️ Connection Error: {str(e)}"
+        try:
+            # Timeout को 60 सेकंड किया ताकि 'High Demand' के समय भी मौका मिले
+            response = requests.post(url, json=payload, timeout=60)
+            result = response.json()
+            
+            if "candidates" in result and result["candidates"]:
+                return result["candidates"][0]["content"]["parts"][0]["text"]
+            
+            # अगर एरर 'High Demand' वाला है, तो 1 सेकंड रुक कर अगला मॉडल ट्राई करो
+            print(f"Model {model} busy, trying next...")
+            time.sleep(1)
+            
+        except Exception as e:
+            print(f"Connection failed for {model}: {e}")
+            continue
+            
+    return "⏳ माफ़ी चाहता हूँ, Google के सभी सर्वर अभी बहुत बिजी हैं। कृपया कुछ मिनट बाद दोबारा कोशिश करें। मेहनत जारी है! - Monu"
 
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
@@ -48,7 +51,7 @@ def webhook():
         text = data["message"].get("text", "")
         
         if text == "/start":
-            reply = "👋 *नमस्ते! मैं CareBot AI हूँ।*\n\nमुझे *Monu Patel* ने आपकी सेहत का ख्याल रखने के लिए बनाया है। आप मुझसे कोई भी हेल्थ सवाल पूछ सकते हैं।"
+            reply = "👋 *नमस्ते! मैं CareBot AI हूँ।*\n\nमुझे *Monu Patel* ने आपकी मदद के लिए बनाया है। पूछिए अपना सवाल!"
         else:
             reply = get_ai_reply(text)
             
@@ -62,8 +65,8 @@ def webhook():
 
 @app.route("/")
 def home():
-    return f"<h1>CareBot AI is Live!</h1><p>Created by: Monu Patel</p>", 200
+    return "<h1>CareBot AI is Running!</h1><p>Designed by Monu Patel</p>", 200
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
-    
+                
