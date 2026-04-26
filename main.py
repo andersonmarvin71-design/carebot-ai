@@ -4,7 +4,10 @@ import requests
 app = Flask(__name__)
 
 TOKEN = "8618597269:AAGuVOwLmesBYZ2OazaQId0SNm_gwowGs6I"
-OPENAI_API_KEY = "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"
+import os
+
+OPENAI_API_KEY = 
+os.environ.get("OPENAI_API_KEY")
 
 def send_message(chat_id, text):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
