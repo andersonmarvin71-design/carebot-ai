@@ -1,5 +1,5 @@
-from flask import Flask, request
-import requests
+from openai import OpenAI
+import os
 
 app = Flask(__name__)
 
