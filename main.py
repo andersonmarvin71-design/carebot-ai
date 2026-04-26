@@ -9,13 +9,13 @@ from flask import Flask, request
 
 app = Flask(__name__)
 
-# Config - Render Environment Variables
+# Config - Render Environment Variables se lega
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 def get_ai_reply(user_text):
-    # ✅ यह URL का सबसे लेटेस्ट वर्जन है
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+    # ✅ यह सबसे स्टेबल URL है (V1 के साथ gemini-pro)
+    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key={GEMINI_API_KEY}"
     
     payload = {
         "contents": [{"parts": [{"text": user_text}]}]
@@ -29,9 +29,10 @@ def get_ai_reply(user_text):
         if "candidates" in result and result["candidates"]:
             return result["candidates"][0]["content"]["parts"][0]["text"]
         
-        # अगर कोई एरर आये तो असली वजह बताएगा
-        error_info = result.get('error', {}).get('message', 'Unknown Error')
-        return f"⚠️ AI Error: {error_info}"
+        # एरर आने पर साफ़ मैसेज देगा
+        error_msg = result.get('error', {}).get('message', 'Unknown Error')
+        return f"⚠️ API Error: {error_msg}"
+        
     except Exception as e:
         return f"❌ Connection Error: {str(e)}"
 
