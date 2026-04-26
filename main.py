@@ -1,7 +1,8 @@
 """
 ╔════════════════════════════════════════════════════════════════╗
 ║         CareBot AI - Telegram Health Assistant                 ║
-║  Created by: Monu | Hosted on GitHub                           ║
+║  Created by: Monu                                              ║
+║  Date: 2026-04-26                                              ║
 ╚════════════════════════════════════════════════════════════════╝
 """
 
@@ -11,63 +12,105 @@ import os
 import logging
 from dotenv import load_dotenv
 
-# Local development के लिए .env लोड करेगा, Server पर environment variables लेगा
+# Load .env file
 load_dotenv()
 
 app = Flask(__name__)
 
-# Config
+# 🔑 Configuration (Render Environment Variables से लेगा)
 TOKEN = os.getenv("8618597269:AAGuVOwLmesBYZ2OazaQId0SNm_gwowGs6I")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
+# Logging setup
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# 📩 Telegram Message भेजने का फंक्शन
 def send_message(chat_id, text):
+    if not text:
+        return False
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    payload = {"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}
+    payload = {
+        "chat_id": chat_id, 
+        "text": text, 
+        "parse_mode": "Markdown"
+    }
     try:
-        requests.post(url, json=payload, timeout=10)
+        response = requests.post(url, json=payload, timeout=10)
+        return response.status_code == 200
     except Exception as e:
-        logger.error(f"Error sending message: {e}")
+        logger.error(f"Telegram Error: {e}")
+        return False
 
+# 🤖 Gemini AI से जवाब लेने का फंक्शन (Updated URL & Logic)
 def get_ai_reply(user_text):
-    # Gemini 1.5 Flash is recommended for fast chatbot responses
+    if not GEMINI_API_KEY:
+        return "❌ Error: GEMINI_API_KEY missing in Render settings."
+
+    # ✅ Latest Gemini 1.5 Flash URL
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
     
-    prompt = f"You are CareBot, a friendly health assistant created by Monu. Provide safe, concise info. User: {user_text}"
-    payload = {"contents": [{"parts": [{"text": prompt}]}]}
+    payload = {
+        "contents": [{
+            "parts": [{"text": f"You are a helpful health assistant. Provide safe information. User query: {user_text}"}]
+        }]
+    }
     
     try:
         response = requests.post(url, json=payload, timeout=15)
         result = response.json()
+        
+        # JSON से जवाब निकालने का सही तरीका
         if "candidates" in result and result["candidates"]:
-            return result["candidates"][0]["content"]["parts"][0]["text"]
-        return "⚠️ I'm busy right now, please try again later."
+            candidate = result["candidates"][0]
+            if "content" in candidate and "parts" in candidate["content"]:
+                return candidate["content"]["parts"][0]["text"]
+            elif candidate.get("finishReason") == "SAFETY":
+                return "⚠️ सुरक्षा कारणों से मैं इस सवाल का जवाब नहीं दे सकता।"
+        
+        logger.error(f"AI Empty Response: {result}")
+        return "⚠️ AI अभी जवाब नहीं दे पा रहा है। कृपया दोबारा कोशिश करें।"
+
     except Exception as e:
-        return "❌ Connection error with AI."
+        logger.error(f"Gemini API Error: {e}")
+        return "❌ AI सर्वर से संपर्क नहीं हो पाया।"
 
+# 🔗 Webhook Handler
 @app.route(f"/{TOKEN}", methods=["POST"])
-def webhook():
-    data = request.get_json()
-    if data and "message" in data:
-        msg = data["message"]
-        chat_id = msg.get("chat", {}).get("id")
-        text = msg.get("text", "")
+def telegram_webhook():
+    try:
+        data = request.get_json()
+        if not data or "message" not in data:
+            return "ok", 200
+        
+        message = data["message"]
+        chat_id = message.get("chat", {}).get("id")
+        text = message.get("text", "").strip()
 
+        if not chat_id or not text:
+            return "ok", 200
+
+        # Commands handling
         if text == "/start":
-            reply = "👋 *CareBot AI is Active!*\nCreated by Monu. How can I help you today?"
+            reply = "👋 *CareBot AI में आपका स्वागत है!*\nमैं Monu द्वारा बनाया गया एक हेल्थ असिस्टेंट हूँ। आप मुझसे सेहत से जुड़े सवाल पूछ सकते हैं।"
+        elif text == "/help":
+            reply = "बस अपना सवाल टाइप करें, जैसे: 'वजन कैसे घटाएं?'"
         else:
+            # Get AI response
             reply = get_ai_reply(text)
         
         send_message(chat_id, reply)
-    return "ok", 200
+        return "ok", 200
+
+    except Exception as e:
+        logger.error(f"Webhook Error: {e}")
+        return "ok", 200
 
 @app.route("/")
 def home():
-    return "CareBot is Online", 200
+    return "🚀 CareBot AI is Running Live!", 200
 
 if __name__ == "__main__":
-    # GitHub/Cloud Deployment के लिए Port dynamic होना चाहिए
+    # Render के लिए पोर्ट सेट करना
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
