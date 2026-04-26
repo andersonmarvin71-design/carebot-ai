@@ -18,7 +18,7 @@ load_dotenv()
 app = Flask(__name__)
 
 # 🔑 Configuration (Render Environment Variables से लेगा)
-TOKEN = os.getenv("8618597269:AAGuVOwLmesBYZ2OazaQId0SNm_gwowGs6I")
+TOKEN = os.getenv("TELEGRAM_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 # Logging setup
