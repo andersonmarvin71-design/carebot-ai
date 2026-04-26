@@ -14,22 +14,24 @@ TOKEN = os.getenv("TELEGRAM_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 def get_ai_reply(user_text):
-    # ✅ यह URL अब 100% काम करेगा क्योंकि इसमें 'v1beta' के साथ सही मॉडल पाथ है
-    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key={GEMINI_API_KEY}"
+    # ✅ यह URL का सबसे लेटेस्ट वर्जन है
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
     
     payload = {
-        "contents": [{"parts": [{"text": f"You are a health assistant. User: {user_text}"}]}]
+        "contents": [{"parts": [{"text": user_text}]}]
     }
     
     try:
         response = requests.post(url, json=payload, timeout=15)
         result = response.json()
         
-        if "candidates" in result:
+        # अगर जवाब मिल गया
+        if "candidates" in result and result["candidates"]:
             return result["candidates"][0]["content"]["parts"][0]["text"]
         
-        # अगर अभी भी एरर आये तो असली वजह बताएगा
-        return f"⚠️ AI Error: {result.get('error', {}).get('message', 'Unknown Error')}"
+        # अगर कोई एरर आये तो असली वजह बताएगा
+        error_info = result.get('error', {}).get('message', 'Unknown Error')
+        return f"⚠️ AI Error: {error_info}"
     except Exception as e:
         return f"❌ Connection Error: {str(e)}"
 
@@ -51,7 +53,7 @@ def webhook():
 
 @app.route("/")
 def home():
-    return "Bot is Running", 200
+    return "CareBot is Running!", 200
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
