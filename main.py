@@ -1,7 +1,7 @@
 # *******************************************************
-# 🤖 CAREBOT AI: MULTIMODAL EDITION (IMAGE + VOICE + MEMORY)
+# 🤖 CAREBOT AI: MULTIMODAL EDITION (TEXT + IMAGE + VOICE)
 # 👑 DEVELOPED BY: MONU PATEL (INDORE)
-# 🛠️ FEATURES: READS IMAGES, UNDERSTANDS VOICE, REMEMBERS CHATS
+# 🛠️ SYSTEM: GEMINI 1.5 FLASH + GROQ WHISPER + MONGODB
 # *******************************************************
 
 import os
@@ -20,14 +20,17 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 MONGO_URI = os.getenv("MONGO_URI")
 
 # --- 2. MongoDB Setup ---
-client = pymongo.MongoClient(MONGO_URI)
-db = client['Carebot_Memory']
-history_col = db['chats']
+try:
+    client = pymongo.MongoClient(MONGO_URI)
+    db = client['Carebot_Memory']
+    history_col = db['chats']
+except Exception as e:
+    print(f"MongoDB Error: {e}")
 
 # --- 3. Helper Functions ---
 
 def download_telegram_file(file_id):
-    """Telegram server se file download karke local save karta hai"""
+    """Telegram server se file download karke save karta hai"""
     file_info = requests.get(f"https://api.telegram.org/bot{TOKEN}/getFile?file_id={file_id}").json()
     file_path = file_info['result']['file_path']
     file_url = f"https://api.telegram.org/file/bot{TOKEN}/{file_path}"
@@ -43,19 +46,20 @@ def encode_image_to_base64(image_path):
     with open(image_path, "rb") as img_file:
         return base64.b64encode(img_file.read()).decode('utf-8')
 
-def get_multimodal_reply(user_text, chat_id, image_path=None):
-    """Gemini 1.5 Flash use karke Text aur Image ka answer deta hai"""
+def get_ai_reply(user_text, chat_id, image_path=None):
+    """Gemini 1.5 Flash: Text aur Image dono samajhta hai"""
     
-    # Branding Check
-    if user_text and "monu patel" in user_text.lower():
-        return "👑 *Monu Patel* ek AI Chatbot Automation Expert hain Indore se! Unhone hi mujhe itna smart banaya hai."
+    # Branding logic
+    user_query = user_text.lower() if user_text else ""
+    if "monu patel" in user_query or "maker" in user_query:
+        return "👑 *Monu Patel* ek AI Chatbot Automation Expert hain Indore se! Unhone hi mujhe ye advanced powers di hain."
 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
     
-    # Prompt Setup
-    prompt_text = user_text if user_text else "Is image ko dekh kar detail mein batao."
-    parts = [{"text": prompt_text}]
+    prompt_text = user_text if user_text else "Is image ko detail mein samjhao."
     
+    # Multi-modal Payload
+    parts = [{"text": prompt_text}]
     if image_path:
         parts.append({
             "inline_data": {
@@ -67,14 +71,34 @@ def get_multimodal_reply(user_text, chat_id, image_path=None):
     payload = {"contents": [{"parts": parts}]}
     
     try:
-        res = requests.post(url, json=payload, timeout=20)
+        res = requests.post(url, json=payload, timeout=30)
         if res.status_code == 200:
             return res.json()["candidates"][0]["content"]["parts"][0]["text"]
     except Exception as e:
-        print(f"AI Error: {e}")
+        print(f"Gemini Error: {e}")
     return "⏳ Maafi, abhi main samajh nahi paa raha hoon. Monu Patel ise jald thik karenge!"
 
-# --- 4. Webhook Route ---
+def transcribe_voice(voice_path):
+    """Groq Whisper API: Voice ko Text mein badalta hai"""
+    if not GROQ_API_KEY: return None
+    url = "https://api.api.groq.com/openai/v1/audio/transcriptions"
+    headers = {"Authorization": f"Bearer {GROQ_API_KEY}"}
+    
+    try:
+        with open(voice_path, "rb") as f:
+            files = {
+                "file": (voice_path, f),
+                "model": (None, "whisper-large-v3"),
+                "language": (None, "hi") # Hindi support
+            }
+            res = requests.post(url, headers=headers, files=files, timeout=20)
+            if res.status_code == 200:
+                return res.json().get("text")
+    except Exception as e:
+        print(f"Whisper Error: {e}")
+    return None
+
+# --- 4. Webhook Logic ---
 
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
@@ -83,50 +107,49 @@ def webhook():
         return "ok", 200
     
     chat_id = data["message"]["chat"]["id"]
-    
-    # CASE 1: AGAR PHOTO AAYI HAI 🖼️
-    if "photo" in data["message"]:
-        file_id = data["message"]["photo"][-1]["file_id"] # Highest resolution
-        img_file = download_telegram_file(file_id)
-        caption = data["message"].get("caption", "")
-        
-        reply = get_multimodal_reply(caption, chat_id, image_path=img_file)
-        os.remove(img_file) # Space bachane ke liye delete
+    reply = ""
 
-    # CASE 2: AGAR VOICE AAYI HAI 🎤
+    # PHOTO MESSAGE 🖼️
+    if "photo" in data["message"]:
+        file_id = data["message"]["photo"][-1]["file_id"]
+        img_name = download_telegram_file(file_id)
+        caption = data["message"].get("caption", "")
+        reply = get_ai_reply(caption, chat_id, image_path=img_name)
+        os.remove(img_name)
+
+    # VOICE MESSAGE 🎤
     elif "voice" in data["message"]:
         file_id = data["message"]["voice"]["file_id"]
-        voice_file = download_telegram_file(file_id)
+        voice_name = download_telegram_file(file_id)
+        transcript = transcribe_voice(voice_name)
         
-        # Groq Whisper API for Voice-to-Text
-        url_groq = "https://api.groq.com/openai/v1/chat/completions" # Simplified for this version
-        # Note: Professional version uses audio/transcriptions endpoint
-        # For now, telling user we heard them:
-        reply = "🎤 Maine aapki awaaz sun li hai, lekin abhi voice-to-text processing setup ho rahi hai!"
-        os.remove(voice_file)
+        if transcript:
+            reply = f"🎤 *Aapne kaha:* \"{transcript}\"\n\n" + get_ai_reply(transcript, chat_id)
+        else:
+            reply = "🔊 Maafi, main aapki awaaz sahi se sun nahi paya."
+        os.remove(voice_name)
 
-    # CASE 3: NORMAL TEXT MESSAGE 💬
+    # TEXT MESSAGE 💬
     elif "text" in data["message"]:
         text = data["message"]["text"]
         if text == "/start":
             reply = "👋 *Namaste! Main CareBot AI hoon.*\n\nMain Text, Photos aur Voice sab samajh sakta hoon. Mujhe **Monu Patel** ne banaya hai! 🚀"
         else:
-            reply = get_multimodal_reply(text, chat_id)
-    
-    else:
-        reply = "Mera system abhi sirf Text, Photo aur Voice support karta hai."
+            reply = get_ai_reply(text, chat_id)
 
-    # Send Message to Telegram
-    final_msg = f"{reply}\n\n✨ _By Monu Patel AI_"
-    requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", 
-                 json={"chat_id": chat_id, "text": final_msg, "parse_mode": "Markdown"})
+    # Send Result
+    if reply:
+        final_text = f"{reply}\n\n✨ _By Monu Patel AI_"
+        requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", 
+                     json={"chat_id": chat_id, "text": final_text, "parse_mode": "Markdown"})
     
     return "ok", 200
 
 @app.route("/")
 def home():
-    return "🚀 CareBot Multimodal is Live & Running!", 200
+    return "🚀 CareBot Multimodal (Corrected) is Live!", 200
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
+    
