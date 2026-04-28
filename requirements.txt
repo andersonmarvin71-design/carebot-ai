@@ -4,4 +4,3 @@ pymongo
 dnspython
 python-dotenv
 gunicorn
-pydub
