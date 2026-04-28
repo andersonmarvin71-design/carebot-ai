@@ -2,5 +2,4 @@ flask
 requests
 pymongo
 dnspython
-python-dotenv
 gunicorn
